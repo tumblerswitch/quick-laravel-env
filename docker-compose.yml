@@ -1,0 +1,44 @@
+version: "3.8"
+services:
+    web:
+        build:
+            context: ./.docker
+            dockerfile: web.dockerfile
+        working_dir: /var/www
+        volumes:
+            - ./:/var/www
+        depends_on:
+            - "app"
+        ports:
+            - 80:80
+
+    # php 8
+    app:
+        build:
+            context: ./.docker
+            dockerfile: app.dockerfile
+        working_dir: /var/www/
+        volumes:
+            - ./:/var/www
+        depends_on:
+            - "db"
+    #mysql 5.7
+    db:
+        image: mysql:5.7
+        volumes:
+            - dbdata:/var/lib/mysql
+        environment:
+            MYSQL_DATABASE: ${DB_DATABASE}
+            MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
+            MYSQL_USER: ${DB_USERNAME}
+        ports:
+            - 33061:3306
+    #      redis 6
+    redis:
+        image: redis:6-alpine
+        ports:
+            - 6379:6379
+
+volumes:
+    dbdata:
