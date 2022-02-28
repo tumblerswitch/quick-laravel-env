@@ -8,35 +8,17 @@ ifneq (,$(wildcard ./.env))
     export
 endif
 
-test:
-	docker stop quick-laravel-env
-	docker rm quick-laravel-env
-	docker run -d --name quick-laravel-env -ti -v "$PWD":/app --workdir=/app --network host ubuntu:20.04
-	docker exec quick-laravel-env apt update
-	docker exec quick-laravel-env apt install -y software-properties-common
-	docker exec quick-laravel-env add-apt-repository ppa:ondrej/php
-	docker exec quick-laravel-env apt update
-	docker exec quick-laravel-env apt install -y php8.0
-	docker exec quick-laravel-env php artisan key:generate
-	docker exec quick-laravel-env php artisan serve
-
-test2:
-	docker build -t qle/app:v1.0 -f ./.docker/app.dockerfile ./.docker
-	docker build -t qle/app:v1.0 -f ./.docker/app.dockerfile ./.docker
-	docker build -t qle/nginx:v1.0 -f ./.docker/web.dockerfile ./.docker
-
 up:
 	docker-compose up -d
 
 down:
 	docker-compose down
 
-install-dev:
+install-local:
 	composer create-project laravel/laravel src
 	cp -a ./src/. ./
 	rm -rf ./src
 	cp .env.dev .env
-	#docker run --rm -u=$(CURRENT_UID):$(CURRENT_GID) -v=$(ROOT_DIR):/src --workdir=/app composer:2.1 install
 	docker-compose build --no-cache
 	docker-compose up -d
 	docker-compose exec app composer install
@@ -46,7 +28,7 @@ install-dev:
 	docker-compose exec app php artisan key:generate
 	docker-compose exec app php artisan migrate
 
-install-without-compose:
+install-local-without-compose:
 	docker run --rm -u=$(CURRENT_UID):$(CURRENT_GID) -v=$(ROOT_DIR):/app --workdir=/app composer:latest create-project laravel/laravel src
 	cp -a ./src/. ./
 	rm -rf ./src
@@ -54,48 +36,22 @@ install-without-compose:
 	docker run --rm -v=$(ROOT_DIR):/app --workdir=/app composer:2.1 install
 	sudo chown -R $USER:$USER ./
 	docker network create qle
-test3:
-	docker stop app db redis web
-	docker rm app db redis web
 	#- PHP8
-	docker run -d --name app -ti --network qle --workdir=/var/www/ -v $(ROOT_DIR):/var/www php:8.0-fpm
-	docker exec app apt update
-	docker exec app apt install -y  \
-    	git \
-    	libfreetype6-dev \
-    	libjpeg-dev \
-    	libpng-dev \
-    	libwebp-dev \
-    	libwebp-dev \
-		--no-install-recommends
-	docker exec app docker-php-ext-configure gd --with-freetype --with-jpeg
-	docker exec app docker-php-ext-install pdo_mysql --jobs=$(CPU_COUNT) gd
+	docker build -t --no-cache qle/app:v1.0 -f ./.docker/app.dockerfile ./.docker
+	docker run -d --name app -ti --network qle --workdir=/var/www/ -v $(ROOT_DIR):/var/www qle/app:v1.0
+	# - Nginx
+	docker run -d --name web -ti --network qle -p 8000:80 -v $(ROOT_DIR)/.docker/vhost.conf:/etc/nginx/conf.d/default.conf  -v $(ROOT_DIR):/var/www nginx:stable-alpine
+	#- Redis 6
+	docker run -d --name redis --network qle -p 6379:6379 -ti -d redis:6.0-alpine
 	#- Mysql 5.7
-	#docker run -d --name db -ti --network qle -e MYSQL_ROOT_PASSWORD=$(DB_ROOT_PASSWORD) -v dbdata:/var/lib/mysql mysql:5.7
 	docker run -d --name db -ti --network qle \
  		-e MYSQL_DATABASE=$(DB_DATABASE) \
  		-e MYSQL_ROOT_PASSWORD=$(DB_ROOT_PASSWORD) \
  		-e MYSQL_PASSWORD=$(DB_PASSWORD) \
  		-e MYSQL_USER=$(DB_USERNAME) \
- 		-v dbdata:/var/lib/mysql mysql:5.7
-# 	docker logs db
-	# - Nginx
-	docker run -d --name web -ti --network qle -p 8000:80 -v $(ROOT_DIR)/.docker/vhost.conf:/etc/nginx/conf.d/default.conf  -v $(ROOT_DIR):/var/www nginx:stable-alpine
-	#- Redis 6
-	docker run -d --name redis --network qle -p 6379:6379 -ti -d redis:6.0-alpine
-	#init
+ 		 mysql:5.7
+	#firs init
 	sudo chown -R $(CURRENT_UID):$(CURRENT_GID) ./
 	sudo chmod -R 777 ./storage/logs
 	sudo chmod -R 777 ./storage/framework
 	docker exec app php artisan key:generate
-	#docker exec app php artisan migrate
-	#SQLSTATE[HY000] [1045] Access denied for user 'seru'@'172.18.0.2' (using password: YES) (SQL: select * from information_schema.tables where table_schema = laravel and table_name = migrations and table_type = 'BASE TABLE')
-
-db:
-	docker stop db2
-	docker rm db2
-	docker run -d --name db2 -ti --network qle -e MYSQL_ROOT_PASSWORD=$(DB_ROOT_PASSWORD) -v dbdata:/var/lib/mysql mysql:5.7
-	docker exec -ti db2 CREATE DATABASE $(DB_DATABASE);
-	docker exec -ti db2 CREATE USER $(DB_USER) WITH PASSWORD $(DB_PASSWORD);
-	docker exec -ti db2 GRANT ALL PRIVILEGES ON $(DB_DATABASE).* TO $(DB_USER)@'localhost';
-	docker exec -ti db2 FLUSH PRIVILEGES
