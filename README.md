@@ -12,9 +12,9 @@
 ## Local install
 1. git clone project
 2. cd project
-2. run '''make install-local''' (preferably) or '''install-local-without-compose'''
-3. run '''docker exec app php artisan migrate'''
+2. run ```make install-local``` (preferably) or ```install-local-without-compose```
+3. run ```docker exec app php artisan migrate```
 
 ## Follow-up launch
 1. cd project dir
-2. '''docker-compose up -d'''
+2. ```docker-compose up -d```
